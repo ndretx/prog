@@ -1,56 +1,46 @@
 import os
 import pandas as pd
-import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
+from datetime import datetime
+import spotipy
 from dotenv import load_dotenv
 
-# Carregar as variáveis de ambiente
+# Carregar variáveis de ambiente
 load_dotenv()
 
-# Configurar o cliente Spotipy
+# Configurar cliente Spotipy
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=os.getenv("SPOTIPY_CLIENT_ID"),
     client_secret=os.getenv("SPOTIPY_CLIENT_SECRET")
 ))
 
 # Carregar a planilha
-planilha = pd.read_excel("artistas_albuns_ano.xlsx")  # Substitua pelo nome da sua planilha
+planilha = pd.read_excel("artistas_albuns_ano.xlsx")
 
-# Função para buscar o gênero de um álbum no Spotify
+# Função para buscar o gênero do artista no Spotify
 def buscar_genero(artista, album):
+    # Buscar o álbum e o artista
     resultados = sp.search(q=f"album:{album} artist:{artista}", type='album', limit=1)
     if resultados['albums']['items']:
         album_info = resultados['albums']['items'][0]
-        genero = album_info['genres']
-        return genero[0] if genero else "Gênero não encontrado"
+        artista_id = album_info['artists'][0]['id']
+        
+        # Buscar o gênero do artista se não estiver disponível no álbum
+        artista_info = sp.artist(artista_id)
+        generos = artista_info.get('genres', [])
+        generos_maiusculo = [genero.upper() for genero in generos]
+        
+        return ', '.join(generos_maiusculo) if generos_maiusculo else "GÊNERO NÃO ENCONTRADO"
     else:
-        return "Álbum não encontrado"
+        return "ÁLBUM NÃO ENCONTRADO"
 
-# Função para carregar gêneros de um CSV local
-def carregar_generos_csv(caminho):
-    try:
-        generos_df = pd.read_csv(caminho)
-        return generos_df.set_index(['Nome do Artista', 'Título do Álbum']).to_dict()['Gênero']
-    except Exception as e:
-        print(f"Erro ao carregar o arquivo CSV: {e}")
-        return {}
-
-# Função para buscar o gênero no CSV
-def buscar_genero_csv(artista, album, generos_csv):
-    key = (artista, album)
-    return generos_csv.get(key, "Gênero não encontrado")
-
-# Carregar gêneros do CSV
-generos_csv = carregar_generos_csv('generos_albuns.csv')
-
-# Criar colunas na planilha
+# Criar colunas na planilha com gêneros formatados em maiúsculas
 planilha['Gênero'] = planilha.apply(lambda row: buscar_genero(row['Nome do Artista'], row['Álbum']), axis=1)
 
-# Atualizar gêneros não encontrados com dados do CSV
-for i, row in planilha.iterrows():
-    if row['Gênero'] == "Gênero não encontrado":
-        planilha.at[i, 'Gênero'] = buscar_genero_csv(row['Nome do Artista'], row['Álbum'], generos_csv)
+# Obter a data e hora atual no formato DDMMYYYYHHMM
+data_hora = datetime.now().strftime("%d%m%Y%H%M")
+nome_arquivo = f"planilha_atualizada_{data_hora}.xlsx"
 
 # Salvar a planilha atualizada
-planilha.to_excel("planilha_atualizada.xlsx", index=False)
-print("Planilha atualizada com os gêneros dos álbuns.")
+planilha.to_excel(nome_arquivo, index=False)
+print(f"Planilha atualizada salva como {nome_arquivo}")
